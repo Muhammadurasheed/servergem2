@@ -1,35 +1,60 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { GitHubConnect } from '@/components/GitHubConnect';
 import { RepoSelector } from '@/components/RepoSelector';
+import { DeploymentProgress } from '@/components/DeploymentProgress';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Rocket, ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react';
+import { Rocket, ArrowLeft, CheckCircle2, Loader2, WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useGitHub } from '@/hooks/useGitHub';
+import { useChat } from '@/hooks/useChat';
 
 const Deploy = () => {
   const navigate = useNavigate();
-  const { isConnected } = useGitHub();
+  const { isConnected: isGitHubConnected } = useGitHub();
+  const { 
+    messages, 
+    isConnected: isWSConnected, 
+    isTyping, 
+    sendMessage,
+    connectionStatus 
+  } = useChat();
+  
   const [selectedRepo, setSelectedRepo] = useState<{ url: string; branch: string } | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [deploymentUrl, setDeploymentUrl] = useState<string | undefined>();
+
+  // Extract deployment URL from messages
+  useEffect(() => {
+    const completeMessage = messages.find(m => m.deploymentUrl);
+    if (completeMessage?.deploymentUrl) {
+      setDeploymentUrl(completeMessage.deploymentUrl);
+    }
+  }, [messages]);
 
   const handleSelectRepo = async (repoUrl: string, branch: string) => {
+    if (!isWSConnected) {
+      toast.error('Backend connection is not available', {
+        description: 'Please ensure the backend server is running at http://localhost:8000'
+      });
+      return;
+    }
+
     setSelectedRepo({ url: repoUrl, branch });
-    setIsAnalyzing(true);
     
-    // Simulate analysis - in production, this would trigger WebSocket message
-    toast.success(`Selected: ${repoUrl}`);
-    toast.info('Analysis will be available when backend is connected');
+    // Send deployment request via WebSocket
+    const message = `I want to analyze and deploy this repository: ${repoUrl} (branch: ${branch})`;
+    sendMessage(message, {
+      action: 'deploy',
+      repoUrl,
+      branch,
+      githubToken: localStorage.getItem('github_token')
+    });
     
-    // TODO: Send to backend via WebSocket
-    // const message = `Analyze and deploy: ${repoUrl} (branch: ${branch})`;
-    // sendMessage(message);
-    
-    setTimeout(() => {
-      setIsAnalyzing(false);
-    }, 2000);
+    toast.success(`Deployment initiated`, {
+      description: 'Analyzing repository and preparing deployment...'
+    });
   };
 
   return (
@@ -53,6 +78,20 @@ const Deploy = () => {
                 <h1 className="text-2xl font-bold">Deploy to Cloud Run</h1>
               </div>
             </div>
+            
+            {/* Backend Connection Status */}
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${
+                connectionStatus.state === 'connected' ? 'bg-green-500' :
+                connectionStatus.state === 'connecting' ? 'bg-yellow-500 animate-pulse' :
+                'bg-red-500'
+              }`} />
+              <span className="text-xs text-muted-foreground">
+                {connectionStatus.state === 'connected' ? 'Backend Online' : 
+                 connectionStatus.state === 'connecting' ? 'Connecting...' : 
+                 'Backend Offline'}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -60,6 +99,18 @@ const Deploy = () => {
       {/* Main Content */}
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto space-y-6">
+          {/* Backend Connection Warning */}
+          {!isWSConnected && (
+            <Alert variant="destructive">
+              <WifiOff className="h-4 w-4" />
+              <AlertDescription>
+                <strong>Backend Offline:</strong> Please start the backend server at http://localhost:8000
+                <br />
+                <code className="text-xs mt-1 block">cd backend && python app.py</code>
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Progress Steps */}
           <Card className="border-border/50 bg-background/50 backdrop-blur">
             <CardHeader>
@@ -68,10 +119,10 @@ const Deploy = () => {
             <CardContent>
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isConnected ? 'bg-green-500 text-white' : 'bg-muted text-muted-foreground'}`}>
-                    {isConnected ? <CheckCircle2 className="w-5 h-5" /> : '1'}
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isGitHubConnected ? 'bg-green-500 text-white' : 'bg-muted text-muted-foreground'}`}>
+                    {isGitHubConnected ? <CheckCircle2 className="w-5 h-5" /> : '1'}
                   </div>
-                  <span className={`text-sm ${isConnected ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
+                  <span className={`text-sm ${isGitHubConnected ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
                     Connect GitHub
                   </span>
                 </div>
@@ -86,10 +137,10 @@ const Deploy = () => {
                 </div>
                 <div className="flex-1 h-[2px] bg-border" />
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-muted text-muted-foreground flex items-center justify-center">
-                    3
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${deploymentUrl ? 'bg-green-500 text-white' : messages.length > 0 ? 'bg-yellow-500 text-white' : 'bg-muted text-muted-foreground'}`}>
+                    {deploymentUrl ? <CheckCircle2 className="w-5 h-5" /> : messages.length > 0 ? <Loader2 className="w-5 h-5 animate-spin" /> : '3'}
                   </div>
-                  <span className="text-sm text-muted-foreground">
+                  <span className={`text-sm ${deploymentUrl || messages.length > 0 ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
                     Deploy
                   </span>
                 </div>
@@ -98,60 +149,59 @@ const Deploy = () => {
           </Card>
 
           {/* GitHub Connection */}
-          <GitHubConnect />
+          {!isGitHubConnected && <GitHubConnect />}
 
           {/* Repository Selector */}
-          {isConnected && <RepoSelector onSelectRepo={handleSelectRepo} />}
-
-          {/* Analysis Status */}
-          {isAnalyzing && (
-            <Alert className="border-primary/20 bg-primary/5">
-              <Loader2 className="h-4 w-4 animate-spin text-primary" />
-              <AlertDescription>
-                Analyzing repository structure and dependencies...
-              </AlertDescription>
-            </Alert>
+          {isGitHubConnected && !selectedRepo && (
+            <RepoSelector onSelectRepo={handleSelectRepo} />
           )}
 
-          {/* Selected Repository Info */}
-          {selectedRepo && !isAnalyzing && (
-            <Card className="border-green-500/20 bg-green-500/5">
+          {/* Deployment Progress & Results */}
+          {selectedRepo && (
+            <DeploymentProgress 
+              messages={messages}
+              isTyping={isTyping}
+              deploymentUrl={deploymentUrl}
+            />
+          )}
+
+          {/* Help Card - Only show if no repo selected */}
+          {!selectedRepo && (
+            <Card className="border-border/50 bg-background/50 backdrop-blur">
               <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-500" />
-                  Repository Selected
-                </CardTitle>
-                <CardDescription>
-                  {selectedRepo.url} (branch: {selectedRepo.branch})
-                </CardDescription>
+                <CardTitle className="text-lg">How It Works</CardTitle>
               </CardHeader>
-              <CardContent>
-                <Alert>
-                  <AlertDescription className="text-sm">
-                    <strong>Next Step:</strong> Connect the backend WebSocket to analyze this repository with Gemini ADK and generate a Dockerfile.
-                  </AlertDescription>
-                </Alert>
+              <CardContent className="space-y-3 text-sm text-muted-foreground">
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-xs font-bold text-primary">1</span>
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">Connect GitHub</p>
+                    <p>Authenticate with your Personal Access Token</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-xs font-bold text-primary">2</span>
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">Select Repository</p>
+                    <p>Choose the repo you want to deploy</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-xs font-bold text-primary">3</span>
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">AI-Powered Deployment</p>
+                    <p>Gemini ADK analyzes your code, generates a Dockerfile, and deploys to Cloud Run</p>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           )}
-
-          {/* Help Card */}
-          <Card className="border-border/50 bg-background/50 backdrop-blur">
-            <CardHeader>
-              <CardTitle className="text-lg">Need Help?</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              <p>
-                <strong>Step 1:</strong> Connect your GitHub account using a Personal Access Token
-              </p>
-              <p>
-                <strong>Step 2:</strong> Select the repository you want to deploy
-              </p>
-              <p>
-                <strong>Step 3:</strong> ServerGem will analyze your code, generate a Dockerfile, and deploy to Cloud Run
-              </p>
-            </CardContent>
-          </Card>
         </div>
       </div>
     </div>
