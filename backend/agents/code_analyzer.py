@@ -1,0 +1,256 @@
+"""
+Code Analyzer Agent - Framework and dependency detection
+"""
+
+import os
+import json
+import re
+from pathlib import Path
+from typing import Dict, List, Optional
+import google.generativeai as genai
+
+
+class CodeAnalyzerAgent:
+    """
+    Analyzes codebases using Gemini for intelligent framework detection
+    and dependency analysis.
+    """
+    
+    def __init__(self, gemini_api_key: str):
+        genai.configure(api_key=gemini_api_key)
+        self.model = genai.GenerativeModel('gemini-2.0-flash-exp')
+    
+    async def analyze_project(self, project_path: str) -> Dict:
+        """Analyze project structure and configuration"""
+        
+        project_path = Path(project_path)
+        
+        if not project_path.exists():
+            return {'error': 'Project path does not exist'}
+        
+        # Gather file information
+        file_structure = self._scan_directory(project_path)
+        
+        # Use Gemini to intelligently analyze the project
+        analysis_prompt = self._build_analysis_prompt(file_structure, project_path)
+        
+        try:
+            response = await self.model.generate_content_async(analysis_prompt)
+            analysis = json.loads(response.text)
+            
+            # Enhance with static analysis
+            analysis['env_vars'] = self._extract_env_vars(project_path)
+            analysis['dockerfile_exists'] = (project_path / 'Dockerfile').exists()
+            
+            return analysis
+        
+        except Exception as e:
+            # Fallback to static analysis
+            return self._fallback_analysis(project_path, file_structure)
+    
+    def _scan_directory(self, path: Path, max_depth: int = 3) -> Dict:
+        """Scan directory structure (exclude node_modules, venv, etc.)"""
+        
+        exclude_dirs = {
+            'node_modules', 'venv', '__pycache__', '.git', 
+            'dist', 'build', 'target', 'vendor'
+        }
+        
+        structure = {
+            'files': [],
+            'directories': [],
+            'config_files': []
+        }
+        
+        config_patterns = [
+            'package.json', 'requirements.txt', 'go.mod', 'pom.xml',
+            'Gemfile', 'composer.json', '.env', 'Dockerfile',
+            'docker-compose.yml', 'app.yaml', 'cloudbuild.yaml'
+        ]
+        
+        for item in path.rglob('*'):
+            # Skip excluded directories
+            if any(excluded in item.parts for excluded in exclude_dirs):
+                continue
+            
+            if item.is_file():
+                rel_path = str(item.relative_to(path))
+                structure['files'].append(rel_path)
+                
+                if item.name in config_patterns:
+                    structure['config_files'].append(rel_path)
+        
+        return structure
+    
+    def _build_analysis_prompt(self, file_structure: Dict, project_path: Path) -> str:
+        """Build analysis prompt for Gemini"""
+        
+        # Read key configuration files
+        config_contents = {}
+        for config_file in file_structure['config_files'][:10]:  # Limit to first 10
+            try:
+                full_path = project_path / config_file
+                if full_path.stat().st_size < 50000:  # Only read files < 50KB
+                    config_contents[config_file] = full_path.read_text()
+            except:
+                continue
+        
+        prompt = f"""
+Analyze this software project and return a JSON object with deployment information.
+
+**File Structure:**
+{json.dumps(file_structure, indent=2)}
+
+**Configuration Files:**
+{json.dumps(config_contents, indent=2)}
+
+**Return JSON in this exact format:**
+{{
+  "language": "python|nodejs|golang|java|ruby|php",
+  "framework": "express|flask|django|fastapi|nextjs|gin|springboot|rails",
+  "entry_point": "main file (e.g., app.py, index.js, main.go)",
+  "port": 8080,
+  "dependencies": [
+    {{"name": "package-name", "version": "1.0.0"}}
+  ],
+  "database": "postgresql|mysql|mongodb|redis|none",
+  "build_tool": "npm|pip|go|maven|gradle|bundle",
+  "start_command": "command to start the application",
+  "recommendations": [
+    "deployment recommendation 1",
+    "deployment recommendation 2"
+  ],
+  "warnings": [
+    "potential issue 1",
+    "potential issue 2"
+  ]
+}}
+
+Return ONLY valid JSON, no markdown or explanations.
+"""
+        
+        return prompt
+    
+    def _extract_env_vars(self, project_path: Path) -> List[str]:
+        """Extract environment variables from .env files"""
+        
+        env_vars = []
+        env_files = ['.env', '.env.example', '.env.sample']
+        
+        for env_file in env_files:
+            env_path = project_path / env_file
+            if env_path.exists():
+                try:
+                    content = env_path.read_text()
+                    for line in content.split('\n'):
+                        line = line.strip()
+                        if line and not line.startswith('#') and '=' in line:
+                            var_name = line.split('=')[0].strip()
+                            env_vars.append(var_name)
+                except:
+                    continue
+        
+        return list(set(env_vars))  # Remove duplicates
+    
+    def _fallback_analysis(self, project_path: Path, file_structure: Dict) -> Dict:
+        """Fallback static analysis if Gemini fails"""
+        
+        analysis = {
+            'language': 'unknown',
+            'framework': 'unknown',
+            'entry_point': None,
+            'port': 8080,
+            'dependencies': [],
+            'database': None,
+            'build_tool': None,
+            'start_command': None,
+            'env_vars': [],
+            'dockerfile_exists': False,
+            'recommendations': ['Unable to fully analyze project - manual configuration may be needed'],
+            'warnings': ['Automated analysis failed - using fallback detection']
+        }
+        
+        # Basic detection logic
+        if 'package.json' in file_structure['config_files']:
+            analysis['language'] = 'nodejs'
+            analysis['build_tool'] = 'npm'
+            try:
+                pkg = json.loads((project_path / 'package.json').read_text())
+                deps = pkg.get('dependencies', {})
+                if 'express' in deps:
+                    analysis['framework'] = 'express'
+                elif 'next' in deps:
+                    analysis['framework'] = 'nextjs'
+            except:
+                pass
+        
+        elif 'requirements.txt' in file_structure['config_files']:
+            analysis['language'] = 'python'
+            analysis['build_tool'] = 'pip'
+            
+            # Check for Flask/Django/FastAPI
+            for py_file in ['app.py', 'main.py', 'manage.py']:
+                if py_file in file_structure['files']:
+                    analysis['entry_point'] = py_file
+                    break
+        
+        elif 'go.mod' in file_structure['config_files']:
+            analysis['language'] = 'golang'
+            analysis['build_tool'] = 'go'
+            analysis['entry_point'] = 'main.go'
+        
+        analysis['env_vars'] = self._extract_env_vars(project_path)
+        analysis['dockerfile_exists'] = (project_path / 'Dockerfile').exists()
+        
+        return analysis
+
+
+# Test analyzer
+async def test_analyzer():
+    import os
+    from dotenv import load_dotenv
+    import tempfile
+    
+    load_dotenv()
+    
+    analyzer = CodeAnalyzerAgent(gemini_api_key=os.getenv('GEMINI_API_KEY'))
+    
+    # Create mock Flask project
+    temp_dir = tempfile.mkdtemp()
+    temp_path = Path(temp_dir)
+    
+    (temp_path / 'app.py').write_text("""
+from flask import Flask
+app = Flask(__name__)
+
+@app.route('/')
+def hello():
+    return 'Hello World'
+
+if __name__ == '__main__':
+    app.run(port=5000)
+""")
+    
+    (temp_path / 'requirements.txt').write_text("""
+flask==3.0.0
+psycopg2==2.9.9
+gunicorn==21.2.0
+""")
+    
+    (temp_path / '.env').write_text("""
+DATABASE_URL=postgresql://localhost/mydb
+SECRET_KEY=mysecret
+""")
+    
+    print("🔍 Analyzing project...\n")
+    analysis = await analyzer.analyze_project(temp_dir)
+    
+    print(json.dumps(analysis, indent=2))
+    
+    # Cleanup
+    import shutil
+    shutil.rmtree(temp_dir)
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(test_analyzer())
