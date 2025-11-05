@@ -4,6 +4,7 @@ import HowItWorks from "@/components/HowItWorks";
 import Architecture from "@/components/Architecture";
 import CTA from "@/components/CTA";
 import Footer from "@/components/Footer";
+import ChatWidget from "@/components/ChatWidget";
 
 const Index = () => {
   return (
@@ -14,6 +15,7 @@ const Index = () => {
       <Architecture />
       <CTA />
       <Footer />
+      <ChatWidget />
     </div>
   );
 };

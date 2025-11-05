@@ -48,6 +48,12 @@ All colors MUST be HSL.
     
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     
+    /* Chat Interface */
+    --chat-user-bg: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    --chat-ai-bg: rgba(30, 41, 59, 0.8);
+    --chat-border: rgba(139, 92, 246, 0.3);
+    --chat-backdrop: rgba(0, 0, 0, 0.4);
+    
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
     --sidebar-primary: 240 5.9% 10%;
