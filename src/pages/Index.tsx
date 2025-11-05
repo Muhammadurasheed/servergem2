@@ -1,3 +1,4 @@
+import { useState } from "react";
 import Hero from "@/components/Hero";
 import Features from "@/components/Features";
 import HowItWorks from "@/components/HowItWorks";
@@ -7,15 +8,33 @@ import Footer from "@/components/Footer";
 import ChatWidget from "@/components/ChatWidget";
 
 const Index = () => {
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [initialMessage, setInitialMessage] = useState<string | undefined>();
+  const [unreadCount] = useState(0);
+
+  const handleCTAClick = (message: string) => {
+    setInitialMessage(message);
+    setIsChatOpen(true);
+  };
+
+  const handleChatToggle = () => {
+    setIsChatOpen(!isChatOpen);
+  };
+
   return (
     <div className="min-h-screen">
-      <Hero />
-      <Features />
-      <HowItWorks />
+      <Hero onCTAClick={handleCTAClick} />
+      <Features onAgentClick={handleCTAClick} />
+      <HowItWorks onCTAClick={handleCTAClick} />
       <Architecture />
-      <CTA />
+      <CTA onCTAClick={handleCTAClick} />
       <Footer />
-      <ChatWidget />
+      <ChatWidget
+        isOpen={isChatOpen}
+        onToggle={handleChatToggle}
+        initialMessage={initialMessage}
+        unreadCount={unreadCount}
+      />
     </div>
   );
 };

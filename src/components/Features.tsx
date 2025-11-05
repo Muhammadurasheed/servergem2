@@ -1,6 +1,10 @@
 import { Card } from "@/components/ui/card";
 import { Brain, Shield, Zap, Bug, DollarSign, Container } from "lucide-react";
 
+interface FeaturesProps {
+  onAgentClick: (message: string) => void;
+}
+
 const features = [
   {
     icon: Brain,
@@ -40,7 +44,7 @@ const features = [
   }
 ];
 
-const Features = () => {
+const Features = ({ onAgentClick }: FeaturesProps) => {
   return (
     <section className="py-24 relative">
       <div className="container mx-auto px-6">
@@ -59,7 +63,8 @@ const Features = () => {
             return (
               <Card 
                 key={index}
-                className="relative p-6 bg-card/50 backdrop-blur-sm border-border/50 hover:border-primary/50 transition-all duration-300 group hover:shadow-[0_0_30px_hsl(var(--primary)/0.2)]"
+                onClick={() => onAgentClick(`Tell me more about the ${feature.title}`)}
+                className="relative p-6 bg-card/50 backdrop-blur-sm border-border/50 hover:border-primary/50 transition-all duration-300 group hover:shadow-[0_0_30px_hsl(var(--primary)/0.2)] cursor-pointer"
               >
                 <div className="space-y-4">
                   <div className={`inline-flex p-3 rounded-xl bg-gradient-to-br from-primary/20 to-secondary/20 ${feature.color}`}>

@@ -1,7 +1,11 @@
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Sparkles } from "lucide-react";
 
-const Hero = () => {
+interface HeroProps {
+  onCTAClick: (message: string) => void;
+}
+
+const Hero = ({ onCTAClick }: HeroProps) => {
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
       {/* Animated background gradient */}
@@ -41,6 +45,7 @@ const Hero = () => {
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-4">
             <Button 
               size="lg" 
+              onClick={() => onCTAClick("I want to deploy my app to Cloud Run")}
               className="text-lg px-8 py-6 bg-gradient-to-r from-primary to-secondary hover:opacity-90 transition-opacity group"
             >
               Try ServerGem Free
@@ -49,6 +54,7 @@ const Hero = () => {
             <Button 
               size="lg" 
               variant="outline"
+              onClick={() => onCTAClick("Show me a demo deployment")}
               className="text-lg px-8 py-6 border-primary/30 hover:bg-primary/10"
             >
               Watch 3-Min Demo

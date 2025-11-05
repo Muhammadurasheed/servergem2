@@ -1,5 +1,10 @@
 import { Card } from "@/components/ui/card";
-import { MessageSquare, Scan, FileCode, Rocket, CheckCircle } from "lucide-react";
+import { MessageSquare, Scan, FileCode, Rocket, CheckCircle, ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+interface HowItWorksProps {
+  onCTAClick: (message: string) => void;
+}
 
 const steps = [
   {
@@ -34,7 +39,7 @@ const steps = [
   }
 ];
 
-const HowItWorks = () => {
+const HowItWorks = ({ onCTAClick }: HowItWorksProps) => {
   return (
     <section className="py-24 relative">
       <div className="container mx-auto px-6">
@@ -87,6 +92,17 @@ const HowItWorks = () => {
               </div>
             );
           })}
+        </div>
+        
+        <div className="text-center mt-12">
+          <Button
+            size="lg"
+            onClick={() => onCTAClick("I want to deploy my app to Cloud Run")}
+            className="text-lg px-8 py-6 bg-gradient-to-r from-primary to-secondary hover:opacity-90 transition-opacity group"
+          >
+            Deploy in 3 Minutes
+            <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+          </Button>
         </div>
       </div>
     </section>

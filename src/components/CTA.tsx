@@ -1,7 +1,11 @@
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Github } from "lucide-react";
 
-const CTA = () => {
+interface CTAProps {
+  onCTAClick: (message: string) => void;
+}
+
+const CTA = ({ onCTAClick }: CTAProps) => {
   return (
     <section className="py-24 relative overflow-hidden">
       {/* Background effects */}
@@ -21,6 +25,7 @@ const CTA = () => {
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-4">
             <Button 
               size="lg" 
+              onClick={() => onCTAClick("I want to deploy my app to Cloud Run")}
               className="text-lg px-8 py-6 bg-gradient-to-r from-primary to-secondary hover:opacity-90 transition-opacity group"
             >
               Try ServerGem Free
@@ -29,6 +34,7 @@ const CTA = () => {
             <Button 
               size="lg" 
               variant="outline"
+              onClick={() => onCTAClick("Show me how ServerGem works")}
               className="text-lg px-8 py-6 border-primary/30 hover:bg-primary/10"
             >
               <Github className="mr-2 h-5 w-5" />

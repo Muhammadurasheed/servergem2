@@ -15,14 +15,22 @@ interface Message {
 
 interface ChatWindowProps {
   onClose: () => void;
+  initialMessage?: string;
 }
 
-const ChatWindow = ({ onClose }: ChatWindowProps) => {
+const ChatWindow = ({ onClose, initialMessage }: ChatWindowProps) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Handle initial message from CTA buttons
+  useEffect(() => {
+    if (initialMessage && messages.length === 0) {
+      handleSendMessage(initialMessage);
+    }
+  }, [initialMessage]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -157,6 +165,7 @@ const ChatWindow = ({ onClose }: ChatWindowProps) => {
         flex flex-col
         animate-in slide-in-from-bottom-4 fade-in duration-300
         md:w-[400px]
+        max-md:inset-5 max-md:max-w-none max-md:h-[calc(100vh-40px)]
       `}
     >
       {/* Header */}
