@@ -172,23 +172,35 @@ class GCloudService:
                 raise FileNotFoundError(f"Dockerfile not found in: {project_path}")
             image_tag = f'{self.artifact_registry}/{self.project_id}/servergem/{image_name}:latest'
             
+            self.logger.info(f"Building image: {image_tag}")
+            
             if progress_callback:
                 await progress_callback({
                     'stage': 'build',
                     'progress': 10,
-                    'message': 'Starting Cloud Build...'
+                    'message': f'Starting Cloud Build for {image_name}...',
+                    'logs': [f'📦 Image: {image_tag}']
                 })
             
-            # Submit build to Cloud Build
+            # Build command with production optimizations
             cmd = [
                 'gcloud', 'builds', 'submit',
                 '--project', self.project_id,
                 '--region', self.region,
                 '--tag', image_tag,
+                '--timeout', '15m',  # 15 minute timeout
+                '--machine-type', 'E2_HIGHCPU_8',  # Faster builds
                 project_path
             ]
             
-            print(f"[GCloudService] Building image: {image_tag}")
+            # Add build config if provided
+            if build_config:
+                if build_config.get('cache'):
+                    cmd.extend(['--no-cache=false'])
+                if build_config.get('timeout'):
+                    cmd.extend(['--timeout', build_config['timeout']])
+            
+            self.logger.info(f"Executing build command: {' '.join(cmd)}")
             
             process = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -196,38 +208,68 @@ class GCloudService:
                 stderr=asyncio.subprocess.PIPE
             )
             
-            # Stream output
+            # Stream output with enhanced progress tracking
             progress = 10
+            logs = []
             async for line in process.stdout:
                 line_str = line.decode().strip()
-                print(f"[CloudBuild] {line_str}")
+                
+                # Skip empty lines
+                if not line_str:
+                    continue
+                
+                # Log to console
+                self.logger.debug(f"[CloudBuild] {line_str}")
+                logs.append(line_str)
+                
+                # Update progress based on build stages
+                if 'Fetching' in line_str or 'Pulling' in line_str:
+                    progress = min(progress + 2, 30)
+                elif 'Step' in line_str:
+                    progress = min(progress + 3, 70)
+                elif 'Pushing' in line_str:
+                    progress = min(progress + 5, 90)
+                elif 'DONE' in line_str or 'SUCCESS' in line_str:
+                    progress = 95
                 
                 if progress_callback:
-                    progress = min(progress + 5, 80)
                     await progress_callback({
                         'stage': 'build',
                         'progress': progress,
-                        'message': line_str
+                        'message': line_str[:100],  # Truncate long lines
+                        'logs': logs[-10:]  # Send last 10 logs
                     })
             
             await process.wait()
             
+            build_duration = time.time() - start_time
+            self.metrics['build_times'].append(build_duration)
+            
             if process.returncode == 0:
+                self.metrics['builds']['success'] += 1
+                
                 if progress_callback:
                     await progress_callback({
                         'stage': 'build',
                         'progress': 100,
-                        'message': 'Build completed successfully'
+                        'message': f'Build completed in {build_duration:.1f}s',
+                        'logs': logs[-5:]
                     })
+                
+                self.logger.info(f"Build successful: {image_tag} ({build_duration:.1f}s)")
                 
                 return {
                     'success': True,
                     'image_tag': image_tag,
-                    'message': f'Image built: {image_tag}'
+                    'build_duration': build_duration,
+                    'message': f'Image built successfully: {image_tag}'
                 }
             else:
+                self.metrics['builds']['failed'] += 1
                 stderr = await process.stderr.read()
-                raise Exception(f"Build failed: {stderr.decode()}")
+                error_msg = stderr.decode()
+                self.logger.error(f"Build failed: {error_msg}")
+                raise Exception(f"Cloud Build failed: {error_msg}")
                 
         except Exception as e:
             return {
