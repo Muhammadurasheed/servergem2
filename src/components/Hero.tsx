@@ -27,12 +27,6 @@ const Hero = ({ onCTAClick }: HeroProps) => {
             <Logo size={120} className="drop-shadow-2xl" />
           </div>
           
-          {/* Badge */}
-          <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-2 backdrop-blur-sm">
-            <Sparkles className="h-4 w-4 text-primary" />
-            <span className="text-sm font-medium">Powered by Google ADK & AI Studio</span>
-          </div>
-          
           {/* Main heading */}
           <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-bold leading-tight">
             <span className="gradient-text">Deploy to Cloud Run</span>
