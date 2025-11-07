@@ -23,20 +23,30 @@ const ChatInput = ({ onSendMessage, disabled = false }: ChatInputProps) => {
     }
   }, [message]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    console.log('[ChatInput] handleSubmit called, message:', message, 'disabled:', disabled);
     if (message.trim() && !disabled) {
+      console.log('[ChatInput] Sending message:', message);
       onSendMessage(message.trim());
       setMessage("");
       setCharCount(0);
+    } else {
+      console.log('[ChatInput] Blocked: message empty or disabled');
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSubmit(e);
+      handleSubmit();
     }
+  };
+  
+  const handleButtonClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    console.log('[ChatInput] Button clicked!');
+    handleSubmit();
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -96,7 +106,8 @@ const ChatInput = ({ onSendMessage, disabled = false }: ChatInputProps) => {
 
         {/* Send Button */}
         <button
-          type="submit"
+          type="button"
+          onClick={handleButtonClick}
           disabled={!message.trim() || disabled}
           className={`
             p-3 rounded-xl
@@ -106,6 +117,7 @@ const ChatInput = ({ onSendMessage, disabled = false }: ChatInputProps) => {
             disabled:opacity-50 disabled:cursor-not-allowed
             enabled:hover:scale-105 enabled:hover:shadow-[0_0_20px_rgba(139,92,246,0.6)]
             enabled:active:scale-95
+            enabled:cursor-pointer
           `}
           aria-label="Send message"
         >
