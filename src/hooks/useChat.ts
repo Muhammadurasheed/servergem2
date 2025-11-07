@@ -27,64 +27,7 @@ export const useChat = (): UseChatReturn => {
   const [isTyping, setIsTyping] = useState(false);
   
   // ========================================================================
-  // Message Handlers
-  // ========================================================================
-  
-  useEffect(() => {
-    const unsubscribe = onMessage((serverMessage: ServerMessage) => {
-      handleServerMessage(serverMessage);
-    });
-    
-    return unsubscribe;
-  }, [onMessage]);
-  
-  const handleServerMessage = useCallback((serverMessage: ServerMessage) => {
-    console.log('[useChat] Received server message:', serverMessage.type);
-    
-    switch (serverMessage.type) {
-      case 'connected':
-        console.log('[useChat] Connected to server:', serverMessage.message);
-        break;
-        
-      case 'typing':
-        setIsTyping(true);
-        break;
-        
-      case 'message':
-        setIsTyping(false);
-        addAssistantMessage({
-          content: serverMessage.data.content,
-          actions: serverMessage.data.actions,
-          metadata: serverMessage.data.metadata,
-        });
-        break;
-        
-      case 'analysis':
-        setIsTyping(false);
-        addAnalysisMessage(serverMessage.data);
-        break;
-        
-      case 'deployment_update':
-        updateDeploymentProgress(serverMessage.data);
-        break;
-        
-      case 'deployment_complete':
-        setIsTyping(false);
-        addDeploymentCompleteMessage(serverMessage.data);
-        break;
-        
-      case 'error':
-        setIsTyping(false);
-        handleErrorMessage(serverMessage);
-        break;
-        
-      default:
-        console.warn('[useChat] Unknown message type:', serverMessage);
-    }
-  }, []);
-  
-  // ========================================================================
-  // Message Creators
+  // Message Creators (defined first to avoid circular dependencies)
   // ========================================================================
   
   const addAssistantMessage = useCallback((data: {
@@ -175,6 +118,65 @@ export const useChat = (): UseChatReturn => {
   }, [toast]);
   
   // ========================================================================
+  // Message Handlers
+  // ========================================================================
+  
+  const handleServerMessage = useCallback((serverMessage: ServerMessage) => {
+    console.log('[useChat] Received server message:', serverMessage.type);
+    
+    switch (serverMessage.type) {
+      case 'connected':
+        console.log('[useChat] Connected to server:', serverMessage.message);
+        break;
+        
+      case 'typing':
+        console.log('[useChat] Setting typing to true');
+        setIsTyping(true);
+        break;
+        
+      case 'message':
+        console.log('[useChat] Setting typing to false, adding message');
+        setIsTyping(false);
+        addAssistantMessage({
+          content: serverMessage.data.content,
+          actions: serverMessage.data.actions,
+          metadata: serverMessage.data.metadata,
+        });
+        break;
+        
+      case 'analysis':
+        setIsTyping(false);
+        addAnalysisMessage(serverMessage.data);
+        break;
+        
+      case 'deployment_update':
+        updateDeploymentProgress(serverMessage.data);
+        break;
+        
+      case 'deployment_complete':
+        setIsTyping(false);
+        addDeploymentCompleteMessage(serverMessage.data);
+        break;
+        
+      case 'error':
+        setIsTyping(false);
+        handleErrorMessage(serverMessage);
+        break;
+        
+      default:
+        console.warn('[useChat] Unknown message type:', serverMessage);
+    }
+  }, [addAssistantMessage, addAnalysisMessage, updateDeploymentProgress, addDeploymentCompleteMessage, handleErrorMessage]);
+  
+  useEffect(() => {
+    const unsubscribe = onMessage((serverMessage: ServerMessage) => {
+      handleServerMessage(serverMessage);
+    });
+    
+    return unsubscribe;
+  }, [onMessage, handleServerMessage]);
+  
+  // ========================================================================
   // Public Methods
   // ========================================================================
   
@@ -206,6 +208,7 @@ export const useChat = (): UseChatReturn => {
   
   const clearMessages = useCallback(() => {
     setMessages([]);
+    setIsTyping(false);
   }, []);
   
   // ========================================================================
@@ -214,12 +217,16 @@ export const useChat = (): UseChatReturn => {
   
   useEffect(() => {
     if (connectionStatus.state === 'error') {
+      // Reset typing state on connection error
+      setIsTyping(false);
       toast({
         title: 'Connection Error',
         description: connectionStatus.error || 'Failed to connect to server',
         variant: 'destructive',
       });
     } else if (connectionStatus.state === 'reconnecting') {
+      // Reset typing state when reconnecting
+      setIsTyping(false);
       toast({
         title: 'Reconnecting...',
         description: `Attempt ${connectionStatus.reconnectAttempt || 1}`,
