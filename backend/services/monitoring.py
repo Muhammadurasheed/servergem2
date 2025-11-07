@@ -5,6 +5,7 @@ FAANG-level metrics, logging, and alerting
 
 import logging
 import time
+import uuid
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 from dataclasses import dataclass, field
@@ -59,15 +60,28 @@ class MonitoringService:
     Production monitoring service
     
     Features:
-    - Structured logging
+    - Structured logging with correlation IDs
     - Metrics collection
     - Performance tracking
     - Error aggregation
     - SLO monitoring
     """
     
-    def __init__(self):
-        self.logger = logging.getLogger(__name__)
+    def __init__(self, correlation_id: Optional[str] = None):
+        """
+        Initialize monitoring service with correlation ID support
+        
+        Args:
+            correlation_id: Optional correlation ID for request tracking
+        """
+        self.correlation_id = correlation_id or self._generate_correlation_id()
+        
+        # Use LoggerAdapter to inject correlation_id into all log records
+        self.logger = logging.LoggerAdapter(
+            logging.getLogger(__name__),
+            {'correlation_id': self.correlation_id}
+        )
+        
         self.deployments: Dict[str, DeploymentMetrics] = {}
         self.metrics = {
             'total_deployments': 0,
@@ -76,6 +90,10 @@ class MonitoringService:
             'avg_deployment_time': 0,
             'error_rate': 0
         }
+    
+    def _generate_correlation_id(self) -> str:
+        """Generate unique correlation ID for monitoring instance"""
+        return f"mon-{uuid.uuid4().hex[:12]}"
     
     def start_deployment(self, deployment_id: str, service_name: str) -> DeploymentMetrics:
         """Start tracking a deployment"""
