@@ -3,9 +3,10 @@ ServerGem Backend API
 FastAPI server optimized for Google Cloud Run
 """
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import Optional, List
 import os
 from dotenv import load_dotenv
 import asyncio
@@ -13,6 +14,11 @@ from datetime import datetime
 import json
 
 from agents.orchestrator import OrchestratorAgent
+from services.deployment_service import deployment_service
+from services.user_service import user_service
+from services.usage_service import usage_service
+from middleware.usage_tracker import UsageTrackingMiddleware
+from models import DeploymentStatus, PlanTier
 
 load_dotenv()
 
@@ -30,6 +36,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Usage tracking middleware
+app.add_middleware(UsageTrackingMiddleware)
 
 # Store active WebSocket connections
 active_connections: dict[str, WebSocket] = {}
@@ -172,13 +181,231 @@ async def websocket_endpoint(websocket: WebSocket):
             del active_connections[session_id]
 
 
+# ============================================================================
+# User Management Endpoints
+# ============================================================================
+
+@app.post("/api/users")
+async def create_user(
+    email: str,
+    username: str,
+    display_name: str,
+    avatar_url: Optional[str] = None,
+    github_token: Optional[str] = None
+):
+    """Create new user account"""
+    # Check if user already exists
+    existing = user_service.get_user_by_email(email)
+    if existing:
+        return {"user": existing.to_dict(), "existing": True}
+    
+    user = user_service.create_user(
+        email=email,
+        username=username,
+        display_name=display_name,
+        avatar_url=avatar_url,
+        github_token=github_token
+    )
+    
+    return {"user": user.to_dict(), "existing": False}
+
+
+@app.get("/api/users/{user_id}")
+async def get_user(user_id: str):
+    """Get user by ID"""
+    user = user_service.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user.to_dict()
+
+
+@app.patch("/api/users/{user_id}")
+async def update_user(user_id: str, updates: dict):
+    """Update user"""
+    user = user_service.update_user(user_id, **updates)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user.to_dict()
+
+
+@app.post("/api/users/{user_id}/upgrade")
+async def upgrade_user(user_id: str, tier: str):
+    """Upgrade user plan"""
+    try:
+        plan_tier = PlanTier(tier)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid tier")
+    
+    user = user_service.upgrade_user_plan(user_id, plan_tier)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return {"user": user.to_dict(), "message": f"Upgraded to {tier}"}
+
+
+# ============================================================================
+# Deployment Management Endpoints
+# ============================================================================
+
+@app.get("/api/deployments")
+async def list_deployments(user_id: str = Query(...)):
+    """Get all deployments for user"""
+    deployments = deployment_service.get_user_deployments(user_id)
+    return {
+        "deployments": [d.to_dict() for d in deployments],
+        "count": len(deployments)
+    }
+
+
+@app.get("/api/deployments/{deployment_id}")
+async def get_deployment(deployment_id: str):
+    """Get deployment by ID"""
+    deployment = deployment_service.get_deployment(deployment_id)
+    if not deployment:
+        raise HTTPException(status_code=404, detail="Deployment not found")
+    return deployment.to_dict()
+
+
+@app.post("/api/deployments")
+async def create_deployment(
+    user_id: str,
+    service_name: str,
+    repo_url: str,
+    region: str = "us-central1",
+    env_vars: dict = None
+):
+    """Create new deployment"""
+    # Check user limits
+    user = user_service.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    active_count = len(deployment_service.get_active_deployments(user_id))
+    if not user.can_deploy_more_services(active_count):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Deployment limit reached. Upgrade to deploy more services."
+        )
+    
+    deployment = deployment_service.create_deployment(
+        user_id=user_id,
+        service_name=service_name,
+        repo_url=repo_url,
+        region=region,
+        env_vars=env_vars
+    )
+    
+    # Track deployment in usage
+    usage_service.track_deployment(user_id)
+    
+    return deployment.to_dict()
+
+
+@app.patch("/api/deployments/{deployment_id}/status")
+async def update_deployment_status(
+    deployment_id: str,
+    status: str,
+    error_message: Optional[str] = None,
+    gcp_url: Optional[str] = None
+):
+    """Update deployment status"""
+    try:
+        status_enum = DeploymentStatus(status)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    
+    deployment = deployment_service.update_deployment_status(
+        deployment_id,
+        status_enum,
+        error_message=error_message,
+        gcp_url=gcp_url
+    )
+    
+    if not deployment:
+        raise HTTPException(status_code=404, detail="Deployment not found")
+    
+    return deployment.to_dict()
+
+
+@app.delete("/api/deployments/{deployment_id}")
+async def delete_deployment(deployment_id: str):
+    """Delete deployment"""
+    success = deployment_service.delete_deployment(deployment_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Deployment not found")
+    
+    return {"message": "Deployment deleted successfully"}
+
+
+@app.get("/api/deployments/{deployment_id}/events")
+async def get_deployment_events(deployment_id: str, limit: int = 50):
+    """Get deployment event log"""
+    events = deployment_service.get_deployment_events(deployment_id, limit)
+    return {
+        "events": [e.to_dict() for e in events],
+        "count": len(events)
+    }
+
+
+@app.post("/api/deployments/{deployment_id}/logs")
+async def add_deployment_log(deployment_id: str, log_line: str):
+    """Add build log line"""
+    deployment_service.add_build_log(deployment_id, log_line)
+    return {"message": "Log added"}
+
+
+# ============================================================================
+# Usage & Analytics Endpoints
+# ============================================================================
+
+@app.get("/api/usage/{user_id}/today")
+async def get_today_usage(user_id: str):
+    """Get today's usage for user"""
+    usage = usage_service.get_today_usage(user_id)
+    user = user_service.get_user(user_id)
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return {
+        "usage": usage.to_dict(),
+        "limits": {
+            "max_services": user.max_services,
+            "max_requests_per_day": user.max_requests_per_day,
+            "max_memory_mb": user.max_memory_mb
+        },
+        "plan_tier": user.plan_tier.value
+    }
+
+
+@app.get("/api/usage/{user_id}/summary")
+async def get_usage_summary(user_id: str, days: int = 30):
+    """Get usage summary for last N days"""
+    summary = usage_service.get_usage_summary(user_id, days)
+    return summary
+
+
+@app.get("/api/usage/{user_id}/monthly")
+async def get_monthly_usage(user_id: str, year: int, month: int):
+    """Get monthly usage"""
+    usage_list = usage_service.get_monthly_usage(user_id, year, month)
+    return {
+        "usage": [u.to_dict() for u in usage_list],
+        "month": f"{year}-{month:02d}"
+    }
+
+
+# ============================================================================
+# Stats & Health
+# ============================================================================
+
 @app.get("/stats")
 async def get_stats():
     """Get service statistics"""
     return {
         "active_connections": len(active_connections),
-        "uptime": "TODO",
-        "requests_processed": "TODO"
+        "total_deployments": len(deployment_service._deployments),
+        "total_users": len(user_service._users)
     }
 
 

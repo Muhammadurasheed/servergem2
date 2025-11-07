@@ -170,7 +170,14 @@ const Dashboard = () => {
         </div>
 
         {/* Deployments List */}
-        {deployments.length === 0 ? (
+        {isLoading ? (
+          <Card className="p-12">
+            <div className="flex flex-col items-center justify-center space-y-4">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="text-muted-foreground">Loading deployments...</p>
+            </div>
+          </Card>
+        ) : deployments.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-16">
               <Rocket className="w-16 h-16 text-muted-foreground mb-4" />
