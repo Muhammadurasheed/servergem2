@@ -2,15 +2,7 @@
 
 AI-powered deployment assistant backend using Google Gemini and Cloud Run.
 
-## Architecture
-
-This backend uses:
-- **FastAPI** - Modern Python web framework optimized for Cloud Run
-- **Google Gemini 2.0 Flash** - Function calling for intelligent agent routing
-- **WebSocket** - Real-time bidirectional communication
-- **Multi-Agent System** - Specialized agents for different deployment tasks
-
-## Setup
+## Quick Start
 
 ### 1. Install Dependencies
 
@@ -21,18 +13,26 @@ pip install -r requirements.txt
 
 ### 2. Configure Environment
 
-```bash
-cp .env.example .env
-# Edit .env with your credentials
-```
+Create `.env` file in `backend/` directory:
 
-Required environment variables:
-- `GEMINI_API_KEY` - Get from Google AI Studio
+```bash
+GEMINI_API_KEY=your-gemini-api-key
+GITHUB_TOKEN=your-github-token
+GOOGLE_CLOUD_PROJECT=your-gcp-project-id
+GOOGLE_CLOUD_REGION=us-central1
+```
 
 ### 3. Run Locally
 
+**From the backend directory:**
 ```bash
+cd backend
 python app.py
+```
+
+**Or from project root:**
+```bash
+python -m backend.app
 ```
 
 Server runs at `http://localhost:8000`

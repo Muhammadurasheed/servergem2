@@ -36,10 +36,10 @@ class OrchestratorAgent:
         self.chat_session = None
         
         # Initialize real services
-        from backend.services import GitHubService, GCloudService, DockerService, AnalysisService
-        from backend.services.monitoring import monitoring
-        from backend.services.security import security
-        from backend.services.optimization import optimization
+        from services import GitHubService, GCloudService, DockerService, AnalysisService
+        from services.monitoring import monitoring
+        from services.security import security
+        from services.optimization import optimization
         
         self.github_service = GitHubService(github_token)
         self.gcloud_service = GCloudService(gcloud_project) if gcloud_project else None

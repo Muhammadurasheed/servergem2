@@ -5,8 +5,8 @@ Integrates CodeAnalyzer with real project paths
 
 from pathlib import Path
 from typing import Dict
-from backend.agents.code_analyzer import CodeAnalyzerAgent
-from backend.agents.docker_expert import DockerExpertAgent
+from agents.code_analyzer import CodeAnalyzerAgent
+from agents.docker_expert import DockerExpertAgent
 
 
 class AnalysisService:
