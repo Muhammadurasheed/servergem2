@@ -1,13 +1,24 @@
 import { Button } from "@/components/ui/button";
-import { LogIn, Menu, X } from "lucide-react";
+import { LogIn, LogOut, Menu, X, User as UserIcon, Rocket } from "lucide-react";
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Logo from "@/components/Logo";
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, signOut, isAuthenticated } = useAuth();
   const isHomePage = location.pathname === '/';
 
   const scrollToSection = (id: string) => {
@@ -59,10 +70,50 @@ const Navbar = () => {
               Architecture
             </button>
             <div className="ml-2 pl-2 border-l border-border/50 flex items-center gap-2">
-              <Button variant="default" size="sm" onClick={() => navigate('/deploy')} className="gap-2">
-                <LogIn className="h-4 w-4" />
-                Get Started
-              </Button>
+              {isAuthenticated ? (
+                <>
+                  <Button variant="ghost" size="sm" onClick={() => navigate('/deploy')} className="gap-2">
+                    <Rocket className="h-4 w-4" />
+                    Deploy
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="gap-2">
+                        <Avatar className="w-6 h-6">
+                          <AvatarImage src={user?.photoURL} />
+                          <AvatarFallback className="text-xs">
+                            {user?.displayName?.charAt(0).toUpperCase() || 'U'}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="hidden lg:inline">{user?.displayName}</span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <DropdownMenuLabel>
+                        <div className="flex flex-col space-y-1">
+                          <p className="text-sm font-medium">{user?.displayName}</p>
+                          <p className="text-xs text-muted-foreground">{user?.email}</p>
+                        </div>
+                      </DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => navigate('/deploy')}>
+                        <Rocket className="mr-2 h-4 w-4" />
+                        <span>Deploy</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={signOut} className="text-destructive">
+                        <LogOut className="mr-2 h-4 w-4" />
+                        <span>Sign Out</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
+              ) : (
+                <Button variant="default" size="sm" onClick={() => navigate('/auth')} className="gap-2">
+                  <LogIn className="h-4 w-4" />
+                  Sign In
+                </Button>
+              )}
             </div>
           </div>
 
@@ -98,10 +149,27 @@ const Navbar = () => {
               Architecture
             </button>
             <div className="px-4 pt-4 border-t border-border/40 space-y-2">
-              <Button variant="default" className="w-full gap-2" onClick={() => { navigate('/deploy'); setIsOpen(false); }}>
-                <LogIn className="h-4 w-4" />
-                Get Started
-              </Button>
+              {isAuthenticated ? (
+                <>
+                  <div className="p-3 bg-accent/50 rounded-lg mb-2">
+                    <p className="text-sm font-medium">{user?.displayName}</p>
+                    <p className="text-xs text-muted-foreground">{user?.email}</p>
+                  </div>
+                  <Button variant="default" className="w-full gap-2" onClick={() => { navigate('/deploy'); setIsOpen(false); }}>
+                    <Rocket className="h-4 w-4" />
+                    Deploy
+                  </Button>
+                  <Button variant="outline" className="w-full gap-2" onClick={() => { signOut(); setIsOpen(false); }}>
+                    <LogOut className="h-4 w-4" />
+                    Sign Out
+                  </Button>
+                </>
+              ) : (
+                <Button variant="default" className="w-full gap-2" onClick={() => { navigate('/auth'); setIsOpen(false); }}>
+                  <LogIn className="h-4 w-4" />
+                  Sign In
+                </Button>
+              )}
             </div>
           </div>
         )}
