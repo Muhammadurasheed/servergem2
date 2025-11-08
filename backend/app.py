@@ -146,7 +146,14 @@ async def websocket_endpoint(websocket: WebSocket):
                 # Progress callback for real-time updates
                 async def progress_callback(update):
                     """Stream progress updates via WebSocket"""
-                    await websocket.send_json(update)
+                    try:
+                        # Check if connection is still open
+                        if session_id in active_connections:
+                            await websocket.send_json(update)
+                    except Exception as e:
+                        # Connection closed - silently handle
+                        print(f"[WebSocket] Could not send progress update: {e}")
+                        pass
                 
                 # Process message with orchestrator (with progress streaming)
                 response = await orchestrator.process_message(

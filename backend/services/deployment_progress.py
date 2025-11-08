@@ -33,20 +33,25 @@ class DeploymentProgressTracker:
         if progress is not None:
             self.current_progress = progress
             
-        # Emit structured message
-        await self.progress_callback({
-            'type': 'message',
-            'data': {
-                'content': message,
-                'timestamp': datetime.now().isoformat(),
-                'metadata': {
-                    'deployment_id': self.deployment_id,
-                    'service_name': self.service_name,
-                    'stage': stage,
-                    'progress': self.current_progress
+        # Emit structured message with error handling for disconnected clients
+        try:
+            await self.progress_callback({
+                'type': 'message',
+                'data': {
+                    'content': message,
+                    'timestamp': datetime.now().isoformat(),
+                    'metadata': {
+                        'deployment_id': self.deployment_id,
+                        'service_name': self.service_name,
+                        'stage': stage,
+                        'progress': self.current_progress
+                    }
                 }
-            }
-        })
+            })
+        except Exception as e:
+            # Gracefully handle disconnected clients
+            print(f"[DeploymentProgress] Warning: Could not emit progress: {e}")
+            pass
     
     # ========================================================================
     # STAGE 1: Repository Access

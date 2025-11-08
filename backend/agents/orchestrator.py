@@ -399,12 +399,28 @@ Ready to deploy to Google Cloud Run! Would you like me to proceed?
             }
             
         except Exception as e:
-            print(f"[Orchestrator] Clone and analyze error: {str(e)}")
+            error_msg = str(e)
+            print(f"[Orchestrator] Clone and analyze error: {error_msg}")
             import traceback
             traceback.print_exc()
+            
+            # Send error via progress callback if available
+            if progress_callback:
+                try:
+                    from services.deployment_progress import create_progress_tracker
+                    tracker = create_progress_tracker(
+                        deployment_id=f"error-{datetime.now().timestamp()}",
+                        service_name="analysis",
+                        progress_callback=progress_callback
+                    )
+                    await tracker.emit_error("Repository Analysis", error_msg)
+                except Exception as callback_error:
+                    print(f"[Orchestrator] Could not send error via callback: {callback_error}")
+                    pass
+            
             return {
                 'type': 'error',
-                'content': f'❌ **Analysis failed**\n\n```\n{str(e)}\n```\n\nPlease try again or check the logs.',
+                'content': f'❌ **Analysis failed**\n\n```\n{error_msg}\n```\n\nPlease try again or check the logs.',
                 'timestamp': datetime.now().isoformat()
             }
     
