@@ -237,10 +237,12 @@ export interface UseChatReturn {
   isConnected: boolean;
   isTyping: boolean;
   connectionStatus: ConnectionStatus;
+  deploymentProgress: any;
   
   // Methods
   sendMessage: (content: string, context?: Record<string, any>) => void;
   clearMessages: () => void;
+  setDeploymentProgress: (progress: any) => void;
   
   // Connection control
   connect: () => void;

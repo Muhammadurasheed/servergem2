@@ -7,6 +7,8 @@ import { useState, useCallback, useEffect } from 'react';
 import { useWebSocket } from './useWebSocket';
 import { UseChatReturn, ChatMessage, ServerMessage } from '@/types/websocket';
 import { useToast } from '@/hooks/use-toast';
+import { DeploymentProgress, DEPLOYMENT_STAGES } from '@/types/deployment';
+import { parseBackendLog, calculateDuration, generateDeploymentId } from '@/lib/websocket/deploymentParser';
 
 /**
  * Hook for chat functionality
@@ -25,6 +27,7 @@ export const useChat = (): UseChatReturn => {
   const { toast } = useToast();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isTyping, setIsTyping] = useState(false);
+  const [deploymentProgress, setDeploymentProgress] = useState<DeploymentProgress | null>(null);
   
   // Debug: Log state changes
   useEffect(() => {
@@ -130,6 +133,57 @@ export const useChat = (): UseChatReturn => {
   // Message Handlers
   // ========================================================================
   
+  // ========================================================================
+  // Deployment Progress Management
+  // ========================================================================
+  
+  const updateDeploymentStage = useCallback((message: string) => {
+    const stageUpdate = parseBackendLog(message);
+    
+    if (!stageUpdate) return;
+    
+    setDeploymentProgress(prev => {
+      if (!prev) {
+        // Initialize deployment progress
+        return {
+          deploymentId: generateDeploymentId(),
+          serviceName: 'Your App',
+          stages: DEPLOYMENT_STAGES.map(stage => ({ ...stage })),
+          currentStage: stageUpdate.stage,
+          overallProgress: stageUpdate.progress || 0,
+          startTime: new Date().toISOString(),
+          status: 'deploying',
+        };
+      }
+      
+      // Update existing progress
+      const updatedStages = prev.stages.map(stage => {
+        if (stage.id === stageUpdate.stage) {
+          const isCompleting = stageUpdate.status === 'success';
+          return {
+            ...stage,
+            status: stageUpdate.status,
+            details: stageUpdate.details,
+            message: stageUpdate.message,
+            startTime: stage.startTime || new Date().toISOString(),
+            endTime: isCompleting ? new Date().toISOString() : undefined,
+            duration: isCompleting
+              ? calculateDuration(stage.startTime || new Date().toISOString(), new Date().toISOString())
+              : undefined,
+          };
+        }
+        return stage;
+      });
+      
+      return {
+        ...prev,
+        stages: updatedStages,
+        currentStage: stageUpdate.stage,
+        overallProgress: stageUpdate.progress || prev.overallProgress,
+      };
+    });
+  }, []);
+
   const handleServerMessage = useCallback((serverMessage: ServerMessage) => {
     console.log('[useChat] Received server message:', serverMessage.type);
     
@@ -146,6 +200,12 @@ export const useChat = (): UseChatReturn => {
       case 'message':
         console.log('[useChat] Setting typing to false, adding message');
         setIsTyping(false);
+        
+        // Check if message contains deployment info
+        if (serverMessage.data.content) {
+          updateDeploymentStage(serverMessage.data.content);
+        }
+        
         addAssistantMessage({
           content: serverMessage.data.content,
           actions: serverMessage.data.actions,
@@ -160,22 +220,51 @@ export const useChat = (): UseChatReturn => {
         
       case 'deployment_update':
         updateDeploymentProgress(serverMessage.data);
+        
+        // Also update deployment stages
+        if (serverMessage.data.message) {
+          updateDeploymentStage(serverMessage.data.message);
+        }
         break;
         
       case 'deployment_complete':
         setIsTyping(false);
+        
+        // Mark deployment as complete
+        setDeploymentProgress(prev => prev ? {
+          ...prev,
+          status: 'success',
+          overallProgress: 100,
+          deploymentUrl: serverMessage.data.url,
+        } : null);
+        
         addDeploymentCompleteMessage(serverMessage.data);
         break;
         
       case 'error':
         setIsTyping(false);
+        
+        // Mark deployment as failed if active
+        if (deploymentProgress) {
+          setDeploymentProgress(prev => prev ? {
+            ...prev,
+            status: 'failed',
+            error: {
+              message: serverMessage.message,
+              stage: prev.currentStage,
+              autoFixable: false,
+              canRollback: false,
+            },
+          } : null);
+        }
+        
         handleErrorMessage(serverMessage);
         break;
         
       default:
         console.warn('[useChat] Unknown message type:', serverMessage);
     }
-  }, [addAssistantMessage, addAnalysisMessage, updateDeploymentProgress, addDeploymentCompleteMessage, handleErrorMessage]);
+  }, [addAssistantMessage, addAnalysisMessage, updateDeploymentProgress, addDeploymentCompleteMessage, handleErrorMessage, updateDeploymentStage, deploymentProgress]);
   
   useEffect(() => {
     const unsubscribe = onMessage((serverMessage: ServerMessage) => {
@@ -269,6 +358,8 @@ export const useChat = (): UseChatReturn => {
     clearMessages,
     connect: wsConnect,
     disconnect: wsDisconnect,
+    deploymentProgress,
+    setDeploymentProgress,
   };
 };
 
