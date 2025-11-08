@@ -244,7 +244,24 @@ const ChatWindow = ({ onClose, initialMessage }: ChatWindowProps) => {
               <>
                 {messages.map((message) => (
                   <div key={message.id}>
-                    <ChatMessage message={message} />
+                    <ChatMessage 
+                      message={message}
+                      onEnvSubmit={(envVars) => {
+                        // Format env vars and send to backend
+                        const envMessage = envVars.length > 0
+                          ? `I've uploaded ${envVars.length} environment variables:\n${envVars.map(e => `- ${e.key}${e.isSecret ? ' (secret)' : ''}`).join('\n')}\n\nPlease proceed with deployment using these environment variables.`
+                          : 'Skip environment variables for now, I\'ll add them later.';
+                        
+                        // Send with env vars as context
+                        sendMessage(envMessage, { 
+                          envVars: envVars.reduce((acc, env) => {
+                            acc[env.key] = env.value;
+                            return acc;
+                          }, {} as Record<string, string>),
+                          secretKeys: envVars.filter(e => e.isSecret).map(e => e.key)
+                        });
+                      }}
+                    />
                     {message.deploymentUrl && (
                       <div className="flex items-center gap-2 mb-4 ml-10">
                         <code className="flex-1 px-3 py-2 bg-accent/30 border border-[rgba(139,92,246,0.2)] rounded-lg text-sm text-[#06b6d4] font-mono">

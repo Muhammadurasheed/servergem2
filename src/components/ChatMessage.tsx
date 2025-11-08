@@ -4,17 +4,26 @@ import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import remarkGfm from "remark-gfm";
 import { User, Sparkles } from "lucide-react";
 import type { ChatMessage } from "@/types/websocket";
+import { EnvVariablesInput, EnvVariable } from "./chat/EnvVariablesInput";
 
 interface ChatMessageProps {
   message: ChatMessage;
+  onEnvSubmit?: (envVars: EnvVariable[]) => void;
 }
 
-const ChatMessageComponent = ({ message }: ChatMessageProps) => {
+const ChatMessageComponent = ({ message, onEnvSubmit }: ChatMessageProps) => {
   const isUser = message.role === "user";
   const time = message.timestamp.toLocaleTimeString("en-US", {
     hour: "2-digit",
     minute: "2-digit",
   });
+
+  // Check if message is requesting environment variables
+  const requestsEnvVars = !isUser && (
+    message.content.toLowerCase().includes('environment variable') ||
+    message.content.toLowerCase().includes('.env file') ||
+    message.content.toLowerCase().includes('provide the environment')
+  );
 
   return (
     <div
@@ -90,6 +99,17 @@ const ChatMessageComponent = ({ message }: ChatMessageProps) => {
             </div>
           )}
         </div>
+        
+        {/* Show env input if AI is requesting env vars */}
+        {requestsEnvVars && onEnvSubmit && (
+          <div className="mt-3 w-full max-w-2xl">
+            <EnvVariablesInput 
+              onEnvSubmit={onEnvSubmit}
+              onSkip={() => onEnvSubmit([])}
+            />
+          </div>
+        )}
+        
         <span className="text-xs text-muted-foreground px-2">{time}</span>
       </div>
     </div>
